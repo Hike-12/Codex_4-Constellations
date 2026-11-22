@@ -1,5 +1,5 @@
 import { AdditiveBlending, Euler, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, RingGeometry, Scene, Vector3, WebGLRenderer } from 'three';
-import { connectStar, constellations, projectStar, waypointProgress } from '../data/constellations';
+import { canLinkStar, connectStar, constellations, projectStar, waypointProgress } from '../data/constellations';
 import { celestialBodies } from './celestialBodies';
 import { makeFigures } from './constellations';
 import { field, nebula } from './sky';
@@ -36,6 +36,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const inverseLook = new Quaternion();
   const forward = new Vector3();
   const offset = new Vector3();
+  const driftSide = new Vector3(...projectStar(177, 0));
   const projected = new Vector3();
   const up = new Vector3(0, 1, 0);
   const matrix = new Matrix4();
@@ -51,27 +52,35 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   let flight: { at: number; from: Vector3 } | undefined;
   let time = 0, previous = 0, phase = 0, frames = 0, sample = 0;
   let baseFov = 47;
+  let quality = 1;
+  let slowSamples = 0;
   const visited = new Map<number, ReadonlySet<number>>();
   const empty = new Set<number>();
 
-  function resize() {
-    renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth < 700 ? 1.3 : 1.45));
+  function resizeRenderer() {
+    const pixelBudget = Math.sqrt(1_650_000 / (innerWidth * innerHeight));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.4, pixelBudget) * quality);
     renderer.setSize(innerWidth, innerHeight, false);
+    for (const layer of [stars, dust, anchors]) layer.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
+  }
+
+  function resize() {
+    resizeRenderer();
     camera.aspect = innerWidth / innerHeight;
     baseFov = innerWidth < 650 ? 63 : 47;
     camera.fov = baseFov;
     camera.updateProjectionMatrix();
-    for (const layer of [stars, dust, anchors]) layer.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
   }
   resize();
   addEventListener('resize', resize);
 
-  function hit(x: number, y: number) {
+  function hit(x: number, y: number, eligibleOnly = false) {
     let best: { figure: number; star: number } | undefined;
     let distance = 21 ** 2;
     for (const [figure, group] of figures.entries()) {
       if (connecting && focus >= 0 && figure !== focus) continue;
       for (const [star, point] of group.stars.entries()) {
+        if (eligibleOnly && !canLinkStar(constellations[figure].edges, visited.get(figure) ?? empty, star)) continue;
         if (offset.copy(point).sub(camera.position).dot(forward) <= 0) continue;
         projected.copy(point).project(camera);
         const dx = (projected.x + 1) * innerWidth / 2 - x;
@@ -100,7 +109,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     canvas.setPointerCapture(e.pointerId);
     pressed = { x: e.clientX, y: e.clientY, dragged: false };
     if (connecting) {
-      const result = hit(e.clientX, e.clientY);
+      const result = hit(e.clientX, e.clientY, true);
       if (result) {
         if (focus !== result.figure) callbacks.select(result.figure);
         link(result, e.clientX / innerWidth * 2 - 1);
@@ -111,7 +120,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     pointerX = e.clientX / innerWidth * 2 - 1;
     pointerY = e.clientY / innerHeight * 2 - 1;
     if (connecting) {
-      const result = hit(e.clientX, e.clientY);
+      const result = hit(e.clientX, e.clientY, true);
       if (result && focus === result.figure) link(result, pointerX);
       return;
     }
@@ -161,7 +170,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       destination.setFromRotationMatrix(matrix.lookAt(origin, target, up));
       look.slerp(destination, 1 - Math.exp(-dt * 1.8));
       offset.set(...projectStar(87, 0, 14 * Math.sin(phase)));
-      offset.add(new Vector3(...projectStar(177, 0, 7 * (1 - Math.cos(phase)))));
+      offset.addScaledVector(driftSide, 7 * (1 - Math.cos(phase)));
       offset.y = 3.7 * Math.sin(phase * 2);
       position.lerp(offset, 1 - Math.exp(-dt * .64));
     }
@@ -224,7 +233,14 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     if (now - sample > 500) {
       const ra = (Math.atan2(-forward.z, forward.x) * 180 / Math.PI + 360) % 360;
       const dec = Math.asin(forward.y) * 180 / Math.PI;
-      callbacks.telemetry(ra, dec, sample ? Math.round(frames * 1000 / (now - sample)) : 0);
+      const fps = sample ? Math.round(frames * 1000 / (now - sample)) : 0;
+      callbacks.telemetry(ra, dec, fps);
+      slowSamples = fps > 0 && fps < 47 ? slowSamples + 1 : 0;
+      if (slowSamples === 3 && quality > .62) {
+        quality *= .85;
+        resizeRenderer();
+        slowSamples = 0;
+      }
       frames = 0;
       sample = now;
     }

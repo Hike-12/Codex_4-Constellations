@@ -55,13 +55,14 @@ export function waypointProgress(seconds: number, duration: number) {
   return t * t * (3 - 2 * t);
 }
 
+export function canLinkStar(edges: readonly [number, number][], visited: ReadonlySet<number>, star: number) {
+  if (visited.has(star) || !edges.some(edge => edge.includes(star))) return false;
+  if (!visited.size || edges.some(([a, b]) =>
+    (a === star && visited.has(b)) || (b === star && visited.has(a)))) return true;
+  // A detached stroke becomes available when the current stroke is complete.
+  return !edges.some(([a, b]) => visited.has(a) !== visited.has(b));
+}
+
 export function connectStar(edges: readonly [number, number][], visited: ReadonlySet<number>, star: number) {
-  if (visited.has(star) || !edges.some(edge => edge.includes(star))) return visited;
-  if (visited.size && !edges.some(([a, b]) =>
-    (a === star && visited.has(b)) || (b === star && visited.has(a)))) {
-    // Some catalog figures contain separate strokes. Start the next component
-    // only once there are no unfinished links in the current component.
-    if (edges.some(([a, b]) => visited.has(a) !== visited.has(b))) return visited;
-  }
-  return new Set([...visited, star]);
+  return canLinkStar(edges, visited, star) ? new Set([...visited, star]) : visited;
 }
