@@ -93,7 +93,7 @@ export function keepOutside(start: Vector3, end: Vector3, center: Vector3, radiu
   const project = x * dx + y * dy + z * dz;
   const startSquared = x * x + y * y + z * z;
   const travelSquared = dx * dx + dy * dy + dz * dz;
-  if (startSquared < squared || project >= 0 || !travelSquared) return;
+  if (startSquared < squared * .999999 || project >= 0 || !travelSquared) return;
   const discriminant = project * project - travelSquared * (startSquared - squared);
   if (discriminant < 0) return;
   const surface = (-project - Math.sqrt(discriminant)) / travelSquared;
@@ -101,7 +101,7 @@ export function keepOutside(start: Vector3, end: Vector3, center: Vector3, radiu
   // Keep the lateral portion of the step so brushing a limb feels like sliding.
   const ex = end.x - center.x, ey = end.y - center.y, ez = end.z - center.z;
   const length = Math.hypot(ex, ey, ez);
-  if (length < radius && length > .001) {
+  if (length < radius && length > .001 && x * ex + y * ey + z * ez > 0) {
     end.set(center.x + ex * radius / length, center.y + ey * radius / length, center.z + ez * radius / length);
   } else {
     end.set(start.x + dx * surface, start.y + dy * surface, start.z + dz * surface);
