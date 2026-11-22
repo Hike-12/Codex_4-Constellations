@@ -70,7 +70,7 @@ export function celestialBodies() {
       varying vec3 p;
       void main(){
         float r=length(p.xy);
-        float grain=.5+.5*sin(r*44.+sin(r*13.7));
+        float grain=.5+.5*sin(r*44.+sin(r*13.7))*(1.-smoothstep(.017,.067,fwidth(r)));
         float divisions=smoothstep(.13,.73,.5+.5*sin(r*3.64));
         float cassini=smoothstep(.21,.48,abs(r-15.7));
         float edge=smoothstep(10.2,11.4,r)*(1.-smoothstep(18.6,19.9,r));

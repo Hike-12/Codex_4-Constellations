@@ -32,6 +32,8 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const origin = new Vector3();
   const position = new Vector3();
+  const viewPoint = new Vector3();
+  const inverseLook = new Quaternion();
   const forward = new Vector3();
   const offset = new Vector3();
   const projected = new Vector3();
@@ -48,6 +50,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   let pressed: { x: number; y: number; dragged: boolean } | undefined;
   let flight: { at: number; from: Vector3 } | undefined;
   let time = 0, previous = 0, phase = 0, frames = 0, sample = 0;
+  let baseFov = 47;
   const visited = new Map<number, ReadonlySet<number>>();
   const empty = new Set<number>();
 
@@ -55,7 +58,8 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth < 700 ? 1.3 : 1.45));
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
-    camera.fov = innerWidth < 650 ? 63 : 47;
+    baseFov = innerWidth < 650 ? 63 : 47;
+    camera.fov = baseFov;
     camera.updateProjectionMatrix();
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
   }
@@ -140,7 +144,6 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   }, { passive: false });
 
   function frame(now: number) {
-    renderer.setAnimationLoop(frame);
     const dt = previous ? Math.min(.05, (now - previous) / 1000) : 1 / 60;
     previous = now;
     time += dt;
@@ -152,13 +155,14 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       if (progress >= 1) flight = undefined;
     } else if (drift && focus < 0 && !connecting) {
       phase += dt * .10;
-      const ra = 87 + Math.sin(phase) * 16 + Math.sin(phase * .41) * 11;
+      const ra = (innerWidth < 650 ? 96 : 87) + Math.sin(phase) * 16 + Math.sin(phase * .41) * 11;
       const dec = -2 + Math.sin(phase * .84) * 7;
       const target = offset.set(...projectStar(ra - pointerX * 4, dec - pointerY * 3));
       destination.setFromRotationMatrix(matrix.lookAt(origin, target, up));
       look.slerp(destination, 1 - Math.exp(-dt * 1.8));
-      offset.set(...projectStar(87, 0, 12 * Math.sin(phase)));
-      offset.y += 2.7 * Math.sin(phase * 2);
+      offset.set(...projectStar(87, 0, 14 * Math.sin(phase)));
+      offset.add(new Vector3(...projectStar(177, 0, 7 * (1 - Math.cos(phase)))));
+      offset.y = 3.7 * Math.sin(phase * 2);
       position.lerp(offset, 1 - Math.exp(-dt * .64));
     }
     camera.quaternion.copy(look);
@@ -169,6 +173,25 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       speed *= Math.exp(-dt * 2.4);
     }
     camera.position.copy(position);
+    let targetFov = baseFov;
+    if (focus >= 0) {
+      inverseLook.copy(flight ? destination : look).invert();
+      const center = figures[focus].center;
+      let extent = 0;
+      for (const star of figures[focus].stars) {
+        viewPoint.copy(star).addScaledVector(center, -29).applyQuaternion(inverseLook);
+        if (viewPoint.z < -1) {
+          extent = Math.max(extent, Math.abs(viewPoint.x / viewPoint.z) / camera.aspect,
+            Math.abs(viewPoint.y / viewPoint.z));
+        }
+      }
+      targetFov = Math.max(baseFov, Math.min(116, Math.atan(extent * 1.13) * 360 / Math.PI));
+    }
+    const nextFov = camera.fov + (targetFov - camera.fov) * (1 - Math.exp(-dt * 2));
+    if (Math.abs(nextFov - camera.fov) > .002) {
+      camera.fov = nextFov;
+      camera.updateProjectionMatrix();
+    }
     camera.updateMatrixWorld();
     sky.material.uniforms.travel.value = travel + phase * 2;
     const animationTime = motion.matches ? 0 : time;
