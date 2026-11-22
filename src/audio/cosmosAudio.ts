@@ -1,10 +1,16 @@
-const chord = [36.62, 54.99, 73.23, 82.2, 109.99, 138.57];
-const bells = [585.86, 657.61, 738.15, 877.93, 985.45, 1171.73];
+const tones = [
+  [108, .010, -.24, .037],
+  [162, .0074, .23, .049],
+  [216, .0047, -.42, .031],
+  [270, .0031, .43, .041],
+  [324, .0020, .07, .055],
+];
+const notes = [432, 486, 540, 648, 729];
 
 export function cosmosAudio() {
   let audio: AudioContext | undefined;
   let master: GainNode;
-  let room: ConvolverNode;
+  let space: GainNode;
   let enabled = false;
 
   function create() {
@@ -12,72 +18,39 @@ export function cosmosAudio() {
     master = ctx.createGain();
     master.gain.value = 0;
     master.connect(ctx.destination);
-    room = ctx.createConvolver();
-    const seconds = 3.3;
-    const impulse = ctx.createBuffer(2, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
-    for (let channel = 0; channel < impulse.numberOfChannels; channel++) {
-      const samples = impulse.getChannelData(channel);
-      let softened = 0;
-      for (let i = 0; i < samples.length; i++) {
-        softened = .76 * softened + .24 * (Math.random() * 2 - 1);
-        samples[i] = softened * (1 - i / samples.length) ** 3.4;
-      }
-    }
-    room.buffer = impulse;
-    const wet = ctx.createGain();
-    wet.gain.value = .42;
-    room.connect(wet).connect(master);
+    space = ctx.createGain();
 
-    const bed = ctx.createBuffer(2, ctx.sampleRate * 12, ctx.sampleRate);
-    for (let channel = 0; channel < bed.numberOfChannels; channel++) {
-      const samples = bed.getChannelData(channel);
-      const white = Float32Array.from(samples, () => Math.random() * 2 - 1);
-      let low = 0, soft = 0;
-      // Warm the filters with the same sequence so the loop has no seam.
-      for (let pass = 0; pass < 2; pass++) {
-        for (let i = 0; i < samples.length; i++) {
-          low += .008 * (white[i] - low);
-          soft += .055 * (white[i] - soft);
-          samples[i] = low * 2.8 + soft * .44;
-        }
-      }
+    // Quiet stereo reflections soften the tones without adding a layer of noise.
+    for (const [seconds, side, level] of [[.27, -.65, .095], [.41, .58, .067], [.63, -.22, .036]]) {
+      const delay = ctx.createDelay();
+      delay.delayTime.value = seconds;
+      const soft = ctx.createBiquadFilter();
+      soft.type = 'lowpass';
+      soft.frequency.value = 610;
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = side;
+      space.connect(delay).connect(soft).connect(gain).connect(pan).connect(master);
     }
-    const texture = ctx.createBufferSource();
-    texture.buffer = bed;
-    texture.loop = true;
-    const rumble = ctx.createBiquadFilter();
-    rumble.type = 'highpass';
-    rumble.frequency.value = 38;
-    const bedLevel = ctx.createGain();
-    bedLevel.gain.value = .32;
-    texture.connect(rumble).connect(bedLevel).connect(master);
-    texture.start();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 300;
-    filter.Q.value = .18;
-    filter.connect(master);
-    filter.connect(room);
-    const lfo = ctx.createOscillator();
-    const depth = ctx.createGain();
-    lfo.frequency.value = .067;
-    depth.gain.value = 120;
-    lfo.connect(depth).connect(filter.frequency);
-    lfo.start();
-    chord.forEach((frequency, i) => {
-      for (const detune of [-4, 4]) {
-        const voice = ctx.createOscillator();
-        const gain = ctx.createGain();
-        voice.type = detune < 0 ? 'sine' : 'triangle';
-        voice.frequency.value = frequency;
-        voice.detune.value = detune;
-        gain.gain.value = (i < 2 ? .017 : .010) * (detune < 0 ? 1 : .58);
-        const pan = ctx.createStereoPanner();
-        pan.pan.value = detune * .09;
-        voice.connect(gain).connect(pan).connect(filter);
-        voice.start();
-      }
-    });
+
+    for (const [pitch, level, side, rhythm] of tones) {
+      const voice = ctx.createOscillator();
+      voice.frequency.value = pitch;
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = side;
+      const breath = ctx.createOscillator();
+      breath.frequency.value = rhythm;
+      const depth = ctx.createGain();
+      depth.gain.value = level * .15;
+      breath.connect(depth).connect(gain.gain);
+      voice.connect(gain).connect(pan).connect(master);
+      pan.connect(space);
+      breath.start();
+      voice.start();
+    }
     return ctx;
   }
 
@@ -88,28 +61,28 @@ export function cosmosAudio() {
         await audio.resume();
       }
       enabled = value;
-      if (audio) master.gain.setTargetAtTime(value ? .68 : 0, audio.currentTime, .24);
+      if (audio) master.gain.setTargetAtTime(value ? .65 : 0, audio.currentTime, value ? .90 : .22);
     },
     chime(note: number, position: number) {
       if (!enabled || !audio || audio.state !== 'running') return;
       const ctx = audio;
       const start = ctx.currentTime;
       const pan = ctx.createStereoPanner();
-      pan.pan.value = Math.max(-.92, Math.min(.92, position));
+      pan.pan.value = Math.max(-.62, Math.min(.62, position));
       pan.connect(master);
-      pan.connect(room);
-      const frequency = bells[note % bells.length];
-      [1, 2.01, 3.02].forEach((ratio, i) => {
+      pan.connect(space);
+      const pitch = notes[note % notes.length];
+      [1, 2].forEach((partial, i) => {
         const bell = ctx.createOscillator();
         const envelope = ctx.createGain();
-        bell.frequency.value = frequency * ratio;
-        envelope.gain.setValueAtTime(.0001, start);
-        envelope.gain.exponentialRampToValueAtTime(.043 / (i * 2 + 1), start + .025);
-        envelope.gain.exponentialRampToValueAtTime(.0001, start + 2.4 - i * .42);
+        bell.frequency.value = pitch * partial;
+        envelope.gain.setValueAtTime(.00001, start);
+        envelope.gain.exponentialRampToValueAtTime(i ? .0011 : .0085, start + .115);
+        envelope.gain.exponentialRampToValueAtTime(.00001, start + 2.15);
         bell.connect(envelope).connect(pan);
         bell.start(start);
-        bell.stop(start + 2.5);
-        bell.onended = () => { bell.disconnect(); envelope.disconnect(); if (i === 0) pan.disconnect(); };
+        bell.stop(start + 2.23);
+        bell.onended = () => { bell.disconnect(); envelope.disconnect(); if (i === 1) pan.disconnect(); };
       });
     },
   };
