@@ -61,7 +61,7 @@ export function cosmosAudio() {
         await audio.resume();
       }
       enabled = value;
-      if (audio) master.gain.setTargetAtTime(value ? .88 : 0, audio.currentTime, value ? .29 : .18);
+      if (audio) master.gain.setTargetAtTime(value ? 1.05 : 0, audio.currentTime, value ? .29 : .18);
     },
     chime(note: number, position: number) {
       if (!enabled || !audio || audio.state !== 'running') return;
