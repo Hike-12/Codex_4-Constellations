@@ -20,7 +20,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const dust = field(950, 105, true);
   const bodies = celestialBodies();
   const { figures, anchors } = makeFigures();
-  scene.add(sky, stars, dust, bodies.root, anchors, ...figures.map(f => f.lines));
+  scene.add(sky.dome, stars, dust, bodies.root, anchors, ...figures.map(f => f.lines));
 
   const ripple = new Mesh(new RingGeometry(.92, 1, 32), new MeshBasicMaterial({
     color: '#e0c49c', transparent: true, blending: AdditiveBlending, depthWrite: false,
@@ -202,7 +202,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       camera.updateProjectionMatrix();
     }
     camera.updateMatrixWorld();
-    sky.material.uniforms.travel.value = travel + phase * 2;
+    sky.update(renderer, camera.position, travel + phase * 2, now);
     const animationTime = motion.matches ? 0 : time;
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.time.value = animationTime;
     dust.rotation.y = animationTime * .013;

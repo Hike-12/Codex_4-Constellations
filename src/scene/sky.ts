@@ -1,4 +1,4 @@
-import { AdditiveBlending, BackSide, BufferAttribute, BufferGeometry, Mesh, Points, ShaderMaterial, SphereGeometry } from 'three';
+import { AdditiveBlending, BackSide, BufferAttribute, BufferGeometry, Mesh, OrthographicCamera, PlaneGeometry, Points, Scene, ShaderMaterial, SphereGeometry, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three';
 
 export const noise = `
 float hash(vec3 p) {
@@ -17,19 +17,23 @@ float fbm(vec3 p) {
 `;
 
 export function nebula() {
-  return new Mesh(new SphereGeometry(810, 32, 20), new ShaderMaterial({
-    side: BackSide, depthWrite: false,
-    uniforms: { travel: { value: 0 } },
+  const clouds = new WebGLRenderTarget(896, 448, { depthBuffer: false });
+  const bakeScene = new Scene();
+  const bakeCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const generator = new ShaderMaterial({
+    uniforms: { travel: { value: 0 }, eye: { value: new Vector3() } },
     vertexShader: `
-      varying vec3 world;
-      void main(){ world=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }
+      varying vec2 coord;
+      void main(){ coord=uv; gl_Position=vec4(position.xy,0.,1.); }
     `,
     fragmentShader: `
-      varying vec3 world;
+      varying vec2 coord;
       uniform float travel;
+      uniform vec3 eye;
       ${noise}
       void main(){
-        vec3 d=normalize(world);
+        float phi=coord.x*6.2831853, theta=(1.-coord.y)*3.14159265;
+        vec3 d=vec3(-cos(phi)*sin(theta),cos(theta),sin(phi)*sin(theta));
         vec3 normal=normalize(vec3(.74,.49,-.40));
         float lane=dot(d,normal);
         float band=exp(-abs(lane)*5.6);
@@ -50,7 +54,7 @@ export function nebula() {
         vec3 haze=vec3(0.);
         for(int i=0; i<3; i++){
           float depth=.55+float(i)*.61;
-          vec3 samplePoint=cameraPosition*.018+d*depth*3.1+vec3(4.2,8.1,1.4);
+          vec3 samplePoint=eye*.018+d*depth*3.1+vec3(4.2,8.1,1.4);
           float pocket=smoothstep(.30,.77,noise(samplePoint)*.74+noise(samplePoint*2.6)*.26);
           float mist=band*pocket*.15;
           float light=shaft*.7+pow(max(0.,dot(d,vec3(-.86,.02,-.50))),28.)*.28;
@@ -60,11 +64,42 @@ export function nebula() {
         col=col*transmittance+haze;
         float dark=smoothstep(.36,.69,fbm(p*1.7+warp*2.))*band;
         col*=1.-dark*.61;
-        col+=vec3((hash(vec3(gl_FragCoord.xy,0.))-.5)*.006);
         gl_FragColor=vec4(col,1.);
       }
     `,
+  });
+  const quad = new Mesh(new PlaneGeometry(2, 2), generator);
+  quad.frustumCulled = false;
+  bakeScene.add(quad);
+  const dome = new Mesh(new SphereGeometry(810, 48, 28), new ShaderMaterial({
+    side: BackSide, depthWrite: false,
+    uniforms: { clouds: { value: clouds.texture } },
+    vertexShader: `
+      varying vec3 world;
+      void main(){ world=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }
+    `,
+    fragmentShader: `
+      varying vec3 world;
+      uniform sampler2D clouds;
+      void main(){
+        vec3 ray=normalize(world);
+        float u=fract(atan(ray.z,-ray.x)*.15915494+1.);
+        float v=1.-acos(clamp(ray.y,-1.,1.))*.31830989;
+        float grain=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715))));
+        gl_FragColor=vec4(texture2D(clouds,vec2(u,v)).rgb+(grain-.5)*.005,1.);
+      }
+    `,
   }));
+  let nextBake = 0;
+  return { dome, update(renderer: WebGLRenderer, eye: Vector3, travel: number, now: number) {
+    if (now < nextBake) return;
+    nextBake = now + 480;
+    generator.uniforms.travel.value = travel;
+    generator.uniforms.eye.value.copy(eye);
+    renderer.setRenderTarget(clouds);
+    renderer.render(bakeScene, bakeCamera);
+    renderer.setRenderTarget(null);
+  }};
 }
 
 export function starMaterial(scale = 1) {
