@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#040508">
+  <meta name="description" content="Drift through a quiet procedural cosmos, trace 24 real constellations, and listen to the stars.">
+  <title>Astral Drift · Celestial Observatory</title>
+</head>
+<body>
+  <canvas id="cosmos" aria-hidden="true"></canvas>
+  <main aria-label="Astral Drift celestial observatory">
+    <div id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
+    <div id="hud">
+      <header class="top">
+        <div class="identity">
+          <h1>astral<span>·</span>drift</h1>
+          <div class="telemetry" aria-label="Telescope coordinates"><span id="ra">RA 05ʰ 48ᵐ</span><i></i><span id="dec">DEC −02° 00′</span><i></i><span id="fps">— FPS</span></div>
+        </div>
+        <nav aria-label="Observatory controls">
+          <button id="mode" type="button" aria-pressed="false" aria-label="Explore mode"><span class="lamp"></span><span id="mode-text">Drift</span><span class="switch"> / Explore</span></button>
+          <button id="connect" type="button" aria-pressed="false"><span class="linked" aria-hidden="true">⋰</span> Connect<span class="optional"> Mode</span></button>
+          <button id="sound" type="button" aria-pressed="false"><span class="wave" aria-hidden="true">≋</span> Sound<span class="optional">: <span id="sound-text">Off</span></span></button>
+          <button id="hide" type="button" aria-label="Hide interface (H)" title="Hide interface (H)">H</button>
+        </nav>
+      </header>
+
+      <article id="monograph" hidden aria-labelledby="figure-name">
+        <div class="overline"><span id="figure-index"></span><button id="close" type="button" aria-label="Close constellation">×</button></div>
+        <h2 id="figure-name"></h2>
+        <p id="translation"></p>
+        <dl><div><dt>Brightest star</dt><dd id="brightest"></dd></div><div><dt>Distance</dt><dd id="distance"></dd></div></dl>
+        <p id="note"></p>
+        <div id="trace" hidden><span id="trace-count" role="status"></span><button id="reset" type="button">Reset</button></div>
+      </article>
+
+      <footer class="bottom">
+        <div class="atlas-heading"><span><b></b> Constellation atlas</span><span id="hint">Select a star or choose a constellation</span><span>24 figures</span></div>
+        <div id="atlas" aria-label="Choose a constellation"></div>
+      </footer>
+    </div>
+    <button id="restore" type="button" hidden aria-label="Show interface (H)" title="Show interface (H)">H</button>
+    <p id="fallback" role="status" hidden>WebGL is unavailable on this device. You can still browse the constellation atlas below.</p>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
