@@ -1,0 +1,27 @@
+{
+  "name": "astral-drift",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hike-12/Codex_4-Constellations.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Hike-12/Codex_4-Constellations/issues"
+  },
+  "homepage": "https://github.com/Hike-12/Codex_4-Constellations#readme",
+  "dependencies": {
+    "three": "^0.174.0"
+  }
+}
