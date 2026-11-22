@@ -3,6 +3,7 @@ import { destinations } from '../data/destinations';
 import { projectStar } from '../data/constellations';
 import { deepSky } from './deepSky';
 import { earthMask } from './earth';
+import { distantBodies, keepOutside, placeForView } from './distance';
 import { noise, starPoints } from './sky';
 
 const light = new Vector3(-.83,.42,.36).normalize();
@@ -41,7 +42,7 @@ export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 
             float storm=length((p.xy-vec2(-.23,-.21))*vec2(1.1,2.4))+flow*.055;
             c=mix(c,vec3(.68,.32,.22)*(.67+.24*sin(storm*78.)),(1.-smoothstep(.06,.15,storm))*smoothstep(.05,.22,p.z)*.85);
           }
-          c=mix(vec3(.017,.020,.033),c,lit*.97);
+          c=mix(vec3(.025,.028,.041),c,lit*.95);
           c+=rim*(.08+lit*.39)*vec3(.41,.47,.58);
         }else if(kind<2.5){
           float land=fbm(p*4.6+vec3(.7,0,1.3));
@@ -115,7 +116,7 @@ function atmosphere(radius: number, tint: string, star = false) {
         vec3 view=normalize(v), normal=normalize(n);
         float mu=abs(dot(view,normal)), r=sqrt(max(0.,1.-mu*mu));
         float edge=clamp((r-core)/(1.-core),0.,1.);
-        float glow=exp(-7.*edge)*smoothstep(0.,.45,mu);
+        float glow=exp(-6.1*edge)*smoothstep(0.,.45,mu);
         float day=mix(.24,1.,smoothstep(-.55,.7,dot(normal+view*.6,light)));
         gl_FragColor=vec4(tint,glow*day*intensity);
       }
@@ -160,7 +161,10 @@ function rings(radius: number, thin: boolean) {
 export function celestialBodies() {
   const root = new Group();
   const animated: ReturnType<typeof sphere>[] = [];
-  const clouds: ReturnType<typeof deepSky>[] = [];
+  const signals = distantBodies(destinations.length);
+  root.add(signals.mesh);
+  const landmarks: { group: Group; center: Vector3; radius: number; tint: Color;
+    solid: boolean; cloud?: ReturnType<typeof deepSky> }[] = [];
   const entries = destinations.map(item => {
     const position = new Vector3(...projectStar(item.ra, item.dec, item.depth));
     const direction = new Vector3(...projectStar(item.ra, item.dec));
@@ -168,11 +172,17 @@ export function celestialBodies() {
     const group = new Group();
     group.position.copy(position);
     root.add(group);
+    const starTint = 'tint' in item ? item.tint :
+      item.kind === 'sun' || item.kind === 'saturn' ? '#e2be93' : item.kind === 'jupiter' ? '#d8af9a' : '#9bb8ec';
+    const landmark: typeof landmarks[number] = { group, center: position, radius: item.radius,
+      tint: new Color(starTint).convertLinearToSRGB(), solid: true };
+    landmarks.push(landmark);
     if (item.kind === 'galaxy' || item.kind === 'cluster' || item.kind === 'nebula') {
       const volume = deepSky(item.kind, item.radius);
       if (item.kind === 'galaxy') volume.rotation.set(.12, -.22, -.25);
       group.add(volume);
-      clouds.push(volume);
+      landmark.cloud = volume;
+      landmark.solid = false;
     } else if (item.kind === 'binary') {
       const amber = sphere(2.4, 6, '#ffac68'), blue = sphere(1.62, 6, '#9fc2ff');
       const amberGlow = atmosphere(2.4, '#ffc37d', true), blueGlow = atmosphere(1.62, '#9abaff', true);
@@ -181,6 +191,7 @@ export function celestialBodies() {
       blueGlow.position.copy(blue.position);
       group.add(amber, blue, amberGlow, blueGlow);
       animated.push(amber, blue);
+      landmark.solid = false;
     } else {
       const gas = item.kind === 'saturn' || item.kind === 'jupiter';
       const kind = item.kind === 'saturn' ? 0 : item.kind === 'jupiter' ? 1 :
@@ -212,9 +223,17 @@ export function celestialBodies() {
     return { position: position.clone().addScaledVector(direction, -item.radius * standOff), direction };
   });
 
-  return { root, entries, resize(pixels: number) {
-    clouds.forEach(cloud => { cloud.material.uniforms.pixels.value = pixels; });
-  }, update(time: number) {
+  return { root, entries, avoid(start: Vector3, next: Vector3) {
+    for (const item of landmarks) if (item.solid) keepOutside(start, next, item.center, item.radius * 1.15);
+  }, update(time: number, eye: Vector3, pixels: number) {
+    signals.begin(pixels);
+    for (const item of landmarks) {
+      const scale = placeForView(item.center, eye, item.group.position);
+      item.group.scale.setScalar(scale);
+      if (item.cloud) item.cloud.material.uniforms.pixels.value = pixels * .46 * scale;
+      signals.add(item.center, eye, item.radius, item.tint, .80, 2);
+    }
+    signals.end();
     for (const body of animated) {
       body.rotation.y = time * .017;
       body.material.uniforms.time.value = time;

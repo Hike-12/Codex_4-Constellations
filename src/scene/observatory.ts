@@ -4,6 +4,7 @@ import { celestialBodies } from './celestialBodies';
 import { makeFigures } from './constellations';
 import { field, nebula } from './sky';
 import { sectors } from './sectors';
+import { blendBetween } from './distance';
 
 type Callbacks = {
   select(index: number): void;
@@ -16,9 +17,9 @@ type Callbacks = {
 export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const renderer = new WebGLRenderer({ canvas, alpha: false, antialias: false, powerPreference: 'high-performance' });
   const scene = new Scene();
-  const camera = new PerspectiveCamera(47, 1, .12, 920);
+  const camera = new PerspectiveCamera(47, 1, .12, 4650);
   const sky = nebula();
-  const stars = field(9900, 730);
+  const stars = field(9900, 4140);
   const dust = field(950, 105, true);
   const bodies = celestialBodies();
   const frontier = sectors();
@@ -38,6 +39,9 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const viewPoint = new Vector3();
   const inverseLook = new Quaternion();
   const forward = new Vector3();
+  const course = new Vector3();
+  const requestedCourse = new Vector3();
+  const step = new Vector3();
   const offset = new Vector3();
   const driftSide = new Vector3(...projectStar(177, 0));
   const driftCenter = new Vector3();
@@ -50,7 +54,9 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const look = new Quaternion().setFromRotationMatrix(
     matrix.lookAt(origin, new Vector3(...projectStar(87, -2)), up),
   );
+  const turn = look.clone();
   const angles = new Euler(0, 0, 0, 'YXZ');
+  let steering = false, atlasOpacity = 1;
   let drift = !motion.matches, connecting = false, focus = -1, destinationIndex = -1;
   let pointerX = 0, pointerY = 0, travel = 0, speed = 0;
   let pressed: { x: number; y: number; dragged: boolean } | undefined;
@@ -67,7 +73,6 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     const pixelBudget = Math.sqrt(1_650_000 / (innerWidth * innerHeight));
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.4, pixelBudget) * quality);
     renderer.setSize(innerWidth, innerHeight, false);
-    bodies.resize(innerHeight * renderer.getPixelRatio() * 1.05);
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
   }
 
@@ -82,7 +87,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   addEventListener('resize', resize);
 
   function hit(x: number, y: number, eligibleOnly = false) {
-    if (!anchors.visible) return;
+    if (atlasOpacity < .13) return;
     let best: { figure: number; star: number } | undefined;
     let distance = 21 ** 2;
     for (const [figure, group] of figures.entries()) {
@@ -138,11 +143,13 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       if (!pressed.dragged && Math.hypot(dx, dy) < 4) return;
       pressed = { x: e.clientX, y: e.clientY, dragged: true };
       beginNavigation();
-      angles.setFromQuaternion(look);
-      angles.y -= dx * .004;
-      angles.x = Math.max(-1.54, Math.min(1.54, angles.x - dy * .004));
+      if (!steering) turn.copy(look);
+      steering = true;
+      angles.setFromQuaternion(turn);
+      angles.y -= dx * .0044;
+      angles.x = Math.max(-1.54, Math.min(1.54, angles.x - dy * .0039));
       angles.z = 0;
-      look.setFromEuler(angles);
+      turn.setFromEuler(angles);
     }
   });
   canvas.addEventListener('pointerup', e => {
@@ -163,14 +170,19 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   function thrust(delta: number) {
     if (connecting || delta === 0) return;
     beginNavigation();
-    speed = Math.max(-900, Math.min(900, speed + delta));
+    requestedCourse.set(0,0,-1).applyQuaternion(look);
+    if (Math.abs(speed) < 2 || course.dot(requestedCourse) < .28) {
+      speed = 0;
+      course.copy(requestedCourse);
+    }
+    speed = Math.max(-225, Math.min(225, speed + Math.max(-62, Math.min(62, delta * .24))));
   }
 
   canvas.addEventListener('wheel', e => {
     if (connecting) return;
     e.preventDefault();
     const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
-    thrust(Math.sign(pixels) * Math.min(370, Math.abs(pixels) * 1.75));
+    thrust(Math.sign(pixels) * Math.min(250, Math.abs(pixels) * 1.6));
   }, { passive: false });
 
   function frame(now: number) {
@@ -194,12 +206,17 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       offset.y = 3.7 * Math.sin(phase * 2);
       position.lerp(offset.add(driftCenter), 1 - Math.exp(-dt * .64));
     }
+    if (steering && !flight && !drift) look.slerp(turn, 1 - Math.exp(-dt * 13));
     camera.quaternion.copy(look);
     forward.set(0, 0, -1).applyQuaternion(look);
     if (!flight && Math.abs(speed) > .025 && !drift && !connecting) {
-      position.addScaledVector(forward, speed * dt);
-      travel += speed * dt * .07;
-      speed *= Math.exp(-dt * 1.55);
+      course.lerp(requestedCourse, 1 - Math.exp(-dt * 3)).normalize();
+      step.copy(position).addScaledVector(course, speed * dt);
+      bodies.avoid(position, step);
+      frontier.avoid(position, step);
+      travel += Math.sign(speed) * step.distanceTo(position) * .07;
+      position.copy(step);
+      speed *= Math.exp(-dt * 1.68);
     }
     camera.position.copy(position);
     let targetFov = baseFov;
@@ -224,21 +241,26 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     camera.updateMatrixWorld();
     sky.dome.position.copy(position);
     stars.position.copy(position);
-    anchors.visible = destinationIndex <= 0 && position.lengthSq() < 355 ** 2;
+    const atlasTarget = destinationIndex > 0 ? 0 : 1 - blendBetween(position.length(), 290, 560);
+    atlasOpacity += (atlasTarget - atlasOpacity) * (1 - Math.exp(-dt * 5.5));
+    anchors.material.uniforms.visibility.value = atlasOpacity;
+    anchors.visible = atlasOpacity > .005;
     sky.update(renderer, camera.position, travel * .17 + phase * 2, now);
     const animationTime = motion.matches ? 0 : time;
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.time.value = animationTime;
     dust.rotation.y = animationTime * .013;
-    bodies.update(animationTime);
-    sector = frontier.update(position, animationTime, renderer.getPixelRatio());
+    const ratio = renderer.getPixelRatio();
+    const pixels = camera.projectionMatrix.elements[5] * innerHeight * ratio;
+    bodies.update(animationTime, position, pixels);
+    sector = frontier.update(position, animationTime, ratio, pixels);
 
     const hovered = hit((pointerX + 1) * innerWidth / 2, (pointerY + 1) * innerHeight / 2);
     figures.forEach((figure, index) => {
       const alignment = figure.center.dot(forward);
-      const opacity = !anchors.visible ? 0 : focus === index ? .66 : hovered?.figure === index ? .43
-        : connecting ? .055 : Math.max(0, (alignment - .84) * 2.1) * (focus < 0 ? 1 : .35);
+      const opacity = atlasOpacity * (focus === index ? .66 : hovered?.figure === index ? .43
+        : connecting ? .055 : Math.max(0, (alignment - .84) * 2.1) * (focus < 0 ? 1 : .35));
       figure.update(dt, opacity, connecting ? (visited.get(index) ?? empty) : undefined, () => {
-        if (focus === index || (focus < 0 && alignment > .95)) {
+        if (focus === index) {
           projected.copy(figure.center).multiplyScalar(420).project(camera);
           callbacks.chime(index, projected.x);
         }
@@ -273,10 +295,11 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   renderer.setAnimationLoop(frame);
 
   function fly(to: Vector3, direction: Vector3) {
+    steering = false;
     startingLook.copy(look);
     destination.setFromRotationMatrix(matrix.lookAt(origin, direction, up));
     flight = { at: performance.now(), from: position.clone(), to,
-      duration: Math.min(4.9, 2.5 + Math.sqrt(to.distanceTo(position)) * .055) };
+      duration: Math.min(7.2, 2.5 + Math.sqrt(to.distanceTo(position)) * .068) };
     speed = 0;
   }
 
@@ -302,6 +325,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       drift = value;
       if (!value) return;
       speed = 0;
+      steering = false;
       driftCenter.copy(position);
       const heading = forward.set(0,0,-1).applyQuaternion(look);
       driftRa = Math.atan2(-heading.z, heading.x) * 180 / Math.PI;

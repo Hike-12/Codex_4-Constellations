@@ -71,7 +71,7 @@ export function nebula() {
   const quad = new Mesh(new PlaneGeometry(2, 2), generator);
   quad.frustumCulled = false;
   bakeScene.add(quad);
-  const dome = new Mesh(new SphereGeometry(810, 48, 28), new ShaderMaterial({
+  const dome = new Mesh(new SphereGeometry(4390, 48, 28), new ShaderMaterial({
     side: BackSide, depthWrite: false,
     uniforms: { clouds: { value: clouds.texture } },
     vertexShader: `
@@ -90,6 +90,7 @@ export function nebula() {
       }
     `,
   }));
+  dome.renderOrder = -100;
   let nextBake = 0;
   return { dome, update(renderer: WebGLRenderer, eye: Vector3, travel: number, now: number) {
     if (now < nextBake) return;
@@ -105,7 +106,7 @@ export function nebula() {
 export function starMaterial(scale = 1) {
   return new ShaderMaterial({
     transparent: true, depthWrite: false, blending: AdditiveBlending,
-    uniforms: { time: {value: 0}, pixelRatio: {value: 1}, scale: {value: scale}, nearby: { value: 0 } },
+    uniforms: { time: {value: 0}, pixelRatio: {value: 1}, scale: {value: scale}, nearby: { value: 0 }, visibility: { value: 1 } },
     vertexShader: `
       attribute vec3 tint;
       attribute float size;
@@ -117,7 +118,7 @@ export function starMaterial(scale = 1) {
       uniform float time;
       uniform float pixelRatio;
       uniform float scale;
-      uniform float nearby;
+      uniform float nearby, visibility;
       void main(){
         vec4 p=modelViewMatrix*vec4(position,1.);
         gl_Position=projectionMatrix*p;
@@ -125,7 +126,7 @@ export function starMaterial(scale = 1) {
         gl_PointSize=clamp(size*scale*pixelRatio*localSize,1.,64.);
         c=tint;
         intensity=power*(.83+.17*sin(time*(.4+phase*.8)+phase*49.));
-        intensity*=mix(1.,smoothstep(.45,4.,-p.z)*(1.-smoothstep(92.,207.,length(p.xyz))),nearby);
+        intensity*=visibility*mix(1.,smoothstep(.45,4.,-p.z)*(1.-smoothstep(92.,207.,length(p.xyz))),nearby);
         flair=smoothstep(5.,13.,size);
       }
     `,
