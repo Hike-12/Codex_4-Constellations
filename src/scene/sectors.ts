@@ -1,4 +1,4 @@
-import { Group, Vector3 } from 'three';
+import { Group, Sphere, Vector3 } from 'three';
 import { destinations } from '../data/destinations';
 import { projectStar } from '../data/constellations';
 import { sphere } from './celestialBodies';
@@ -19,7 +19,7 @@ function seed(x: number, y: number, z: number) {
 function cell() {
   const root = new Group();
   const specks = starPoints(Array(marks * 3).fill(0), Array(marks * 3).fill(0), Array(marks).fill(1), Array(marks).fill(1));
-  specks.frustumCulled = false;
+  specks.geometry.boundingSphere = new Sphere(new Vector3(span / 2, span / 2, span / 2), span * Math.sqrt(3) / 2);
   specks.material.uniforms.nearby.value = 1;
   const world = sphere(1, 3, '#ab8f7b', 26);
   world.material.transparent = true;
@@ -43,7 +43,7 @@ export function sectors() {
     for (let i = 0; i < marks; i++) {
       position.setXYZ(i, rng() * span, rng() * span, rng() * span);
       const hue = rng();
-      tint.setXYZ(i, hue < .3 ? .98 : .61, hue < .3 ? .76 : .76, hue < .3 ? .53 : 1);
+      tint.setXYZ(i, hue < .3 ? .98 : .61, .76, hue < .3 ? .53 : 1);
       const bright = rng() ** 6;
       size.setX(i, 4 + rng() * 6 + bright * 7);
       power.setX(i, .13 + bright * .49);
