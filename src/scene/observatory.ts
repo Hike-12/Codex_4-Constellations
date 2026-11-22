@@ -157,7 +157,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     previous = now;
     time += dt;
     if (flight) {
-      const progress = waypointProgress(time - flight.at, motion.matches ? .25 : 2.75);
+      const progress = waypointProgress((now - flight.at) / 1000, motion.matches ? .25 : 2.75);
       const direction = figures[focus].center;
       look.slerpQuaternions(startingLook, destination, progress);
       position.copy(flight.from).lerp(offset.copy(direction).multiplyScalar(29), progress);
@@ -254,7 +254,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       if (index < 0) { flight = undefined; return; }
       startingLook.copy(look);
       destination.setFromRotationMatrix(matrix.lookAt(origin, figures[index].center, up));
-      flight = { at: time, from: position.clone() };
+      flight = { at: performance.now(), from: position.clone() };
       speed = 0;
       callbacks.progress(index, visited.get(index)?.size ?? 0);
     },
