@@ -163,7 +163,7 @@ export function celestialBodies() {
   const animated: ReturnType<typeof sphere>[] = [];
   const signals = distantBodies(destinations.length);
   root.add(signals.mesh);
-  const landmarks: { group: Group; center: Vector3; radius: number; tint: Color;
+  const landmarks: { name: string; group: Group; center: Vector3; radius: number; tint: Color;
     solid: boolean; cloud?: ReturnType<typeof deepSky> }[] = [];
   const entries = destinations.map(item => {
     const position = new Vector3(...projectStar(item.ra, item.dec, item.depth));
@@ -174,7 +174,7 @@ export function celestialBodies() {
     root.add(group);
     const starTint = 'tint' in item ? item.tint :
       item.kind === 'sun' || item.kind === 'saturn' ? '#e2be93' : item.kind === 'jupiter' ? '#d8af9a' : '#9bb8ec';
-    const landmark: typeof landmarks[number] = { group, center: position, radius: item.radius,
+    const landmark: typeof landmarks[number] = { name: item.name, group, center: position, radius: item.radius,
       tint: new Color(starTint).convertLinearToSRGB(), solid: true };
     landmarks.push(landmark);
     if (item.kind === 'galaxy' || item.kind === 'cluster' || item.kind === 'nebula') {
@@ -223,7 +223,22 @@ export function celestialBodies() {
     return { position: position.clone().addScaledVector(direction, -item.radius * standOff), direction };
   });
 
-  return { root, entries, avoid(start: Vector3, next: Vector3) {
+  const bearing = new Vector3();
+  return { root, entries, sightline(eye: Vector3, forward: Vector3) {
+    let name = '', alignment = .99982, distance = Infinity;
+    for (const item of landmarks) {
+      bearing.copy(item.center).sub(eye);
+      const range = bearing.length();
+      if (range < 135) continue;
+      const dot = bearing.dot(forward) / range;
+      if (dot > alignment || (dot === alignment && range < distance)) {
+        name = item.name;
+        alignment = dot;
+        distance = range;
+      }
+    }
+    return name;
+  }, avoid(start: Vector3, next: Vector3) {
     for (const item of landmarks) if (item.solid) keepOutside(start, next, item.center, item.radius * 1.15);
   }, update(time: number, eye: Vector3, pixels: number) {
     signals.begin(pixels);

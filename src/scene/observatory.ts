@@ -8,7 +8,7 @@ import { blendBetween } from './distance';
 
 type Callbacks = {
   select(index: number): void;
-  telemetry(ra: number, dec: number, fps: number, range: number, sector: string): void;
+  telemetry(ra: number, dec: number, fps: number, range: number, sector: string, target: string): void;
   navigate(): void;
   chime(note: number, pan: number): void;
   progress(index: number, count: number): void;
@@ -280,7 +280,8 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       const ra = (Math.atan2(-forward.z, forward.x) * 180 / Math.PI + 360) % 360;
       const dec = Math.asin(forward.y) * 180 / Math.PI;
       const fps = sample ? Math.round(frames * 1000 / (now - sample)) : 0;
-      callbacks.telemetry(ra, dec, fps, position.length(), sector);
+      callbacks.telemetry(ra, dec, fps, position.length(), sector,
+        !drift && !flight && !connecting && destinationIndex < 0 ? bodies.sightline(position, forward) : '');
       slowSamples = fps > 0 && fps < 47 ? slowSamples + 1 : 0;
       if (slowSamples === 3 && quality > .62) {
         quality *= .85;

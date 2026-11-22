@@ -196,7 +196,7 @@ try {
       drifting = false;
       updateControls();
     },
-    telemetry(ra, dec, fps, range, sector) {
+    telemetry(ra, dec, fps, range, sector, target) {
       const raMinutes = Math.floor(ra * 4);
       const decMinutes = Math.floor(Math.abs(dec) * 60);
       el('ra').textContent = 'RA ' + pad(Math.floor(raMinutes / 60)) + 'ʰ ' + pad(raMinutes % 60) + 'ᵐ';
@@ -205,6 +205,9 @@ try {
       const readout = el('range');
       readout.textContent = 'Range ' + String(Math.round(range)).padStart(3, '0');
       readout.dataset.sector = sector;
+      const sightline = el('sightline');
+      sightline.textContent = target;
+      sightline.hidden = !target;
     },
     progress(index, count) {
       if (index !== selected) return;

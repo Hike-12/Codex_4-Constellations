@@ -178,3 +178,9 @@ nav button:hover, nav button[aria-pressed="true"], #restore:hover {
   #monograph { bottom: calc(110px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 355px) { .flight-controls #range { display: none; } }
+
+#sightline {
+  position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+  color: #f3d9b4; font-size: 9px; letter-spacing: .13em; text-transform: uppercase;
+  white-space: nowrap; text-shadow: 0 1px 5px #000, 0 0 10px #000;
+}

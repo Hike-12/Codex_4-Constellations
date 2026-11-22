@@ -105,13 +105,12 @@ export function sectors() {
       }
       previous = current;
     }
-    for (const [key, tile] of active) {
+    for (const tile of active.values()) {
       const uniforms = tile.specks.material.uniforms;
       uniforms.time.value = time;
       uniforms.pixelRatio.value = ratio;
       if (!tile.spec) continue;
       const range = tile.spec.center.distanceTo(eye);
-      if (range < span) seen.set(key, tile.spec);
       const opacity = 1 - blendBetween(range, 130, 195);
       tile.world.visible = opacity > 0;
       tile.world.rotation.y = time * .013;
@@ -120,11 +119,12 @@ export function sectors() {
     far.begin(pixels);
     for (const [key, spec] of vicinity) {
       const range = spec.center.distanceTo(eye);
+      if (range < 345) seen.set(key, spec);
       const presence = seen.has(key) ? 1 : 1 - blendBetween(range, 645, 835);
-      far.add(spec.center, eye, spec.radius, spec.tint, presence * blendBetween(range, 130, 195), spec.kind === 3 ? 1 : 0);
+      far.add(spec.center, eye, spec.radius, spec.tint, presence * blendBetween(range, 130, 195), spec.kind === 3 ? 0 : 1);
     }
     for (const [key, spec] of seen) {
-      if (!vicinity.has(key)) far.add(spec.center, eye, spec.radius, spec.tint, .86, spec.kind === 3 ? 1 : 0);
+      if (!vicinity.has(key)) far.add(spec.center, eye, spec.radius, spec.tint, .86, spec.kind === 3 ? 0 : 1);
     }
     far.end();
     return current;
