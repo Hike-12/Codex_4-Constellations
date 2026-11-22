@@ -1,0 +1,129 @@
+import { AdditiveBlending, BackSide, BufferAttribute, BufferGeometry, Mesh, Points, ShaderMaterial, SphereGeometry } from 'three';
+
+export const noise = `
+float hash(vec3 p) {
+  p = fract(p * .3183099 + .1) * 17.;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float noise(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f*f*(3.-2.*f);
+  return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+    mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+float fbm(vec3 p) {
+  return .52*noise(p)+.26*noise(p*2.13+9.)+.14*noise(p*4.27)+.08*noise(p*8.61);
+}
+`;
+
+export function nebula() {
+  return new Mesh(new SphereGeometry(810, 32, 20), new ShaderMaterial({
+    side: BackSide, depthWrite: false,
+    uniforms: { travel: { value: 0 } },
+    vertexShader: `
+      varying vec3 world;
+      void main(){ world=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }
+    `,
+    fragmentShader: `
+      varying vec3 world;
+      uniform float travel;
+      ${noise}
+      void main(){
+        vec3 d=normalize(world);
+        vec3 normal=normalize(vec3(.74,.49,-.40));
+        float lane=dot(d,normal);
+        float band=exp(-abs(lane)*5.6);
+        vec3 p=d*5.7+vec3(1.7,4.8,travel*.013);
+        float warp=fbm(p*1.9);
+        float a=fbm(p+warp*2.1);
+        float b=fbm(p*2.8-vec3(warp*2.5));
+        float storm=smoothstep(.23,.77,a*.72+b*.28);
+        float ridge=exp(-abs(lane + (warp-.52)*.35)*15.);
+        float density=band*storm*.82+ridge*storm*.32;
+        vec3 col=vec3(.014,.019,.035);
+        col+=vec3(.105,.16,.27)*density;
+        col+=vec3(.28,.20,.13)*pow(storm,2.9)*ridge;
+        float shaft=pow(max(0.,dot(d,normalize(vec3(-.15,.13,-1.)))),29.);
+        col+=vec3(.15,.12,.085)*shaft*storm*band*.7;
+        float dark=smoothstep(.36,.69,fbm(p*1.7+warp*2.))*band;
+        col*=1.-dark*.61;
+        col+=vec3((hash(vec3(gl_FragCoord.xy,0.))-.5)*.006);
+        gl_FragColor=vec4(col,1.);
+      }
+    `,
+  }));
+}
+
+export function starMaterial(scale = 1) {
+  return new ShaderMaterial({
+    transparent: true, depthWrite: false, blending: AdditiveBlending,
+    uniforms: { time: {value: 0}, pixelRatio: {value: 1}, scale: {value: scale} },
+    vertexShader: `
+      attribute vec3 tint;
+      attribute float size;
+      attribute float power;
+      attribute float phase;
+      varying vec3 c;
+      varying float intensity;
+      varying float flair;
+      uniform float time;
+      uniform float pixelRatio;
+      uniform float scale;
+      void main(){
+        vec4 p=modelViewMatrix*vec4(position,1.);
+        gl_Position=projectionMatrix*p;
+        gl_PointSize=clamp(size*scale*pixelRatio,1.,64.);
+        c=tint;
+        intensity=power*(.83+.17*sin(time*(.4+phase*.8)+phase*49.));
+        flair=smoothstep(5.,13.,size);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 c;
+      varying float intensity;
+      varying float flair;
+      void main(){
+        vec2 p=gl_PointCoord*2.-1.;
+        float r=length(p);
+        float core=exp(-r*r*125.);
+        float halo=exp(-r*r*14.)*.33;
+        float rays=(exp(-abs(p.x)*33.-abs(p.y)*3.7)+exp(-abs(p.y)*33.-abs(p.x)*3.7))*.29*flair;
+        float alpha=(core+halo+rays)*(1.-smoothstep(.7,1.,r))*intensity;
+        gl_FragColor=vec4(mix(c,vec3(1.),core*.75),alpha);
+      }
+    `,
+  });
+}
+
+export function starPoints(positions: number[], colors: number[], sizes: number[], powers: number[], scale?: number) {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geometry.setAttribute('tint', new BufferAttribute(new Float32Array(colors), 3));
+  geometry.setAttribute('size', new BufferAttribute(new Float32Array(sizes), 1));
+  geometry.setAttribute('power', new BufferAttribute(new Float32Array(powers), 1));
+  geometry.setAttribute('phase', new BufferAttribute(Float32Array.from(sizes, (_, i) => (i * .6180339) % 1), 1));
+  return new Points(geometry, starMaterial(scale));
+}
+
+export function random(seed = 401) {
+  return () => {
+    seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+export function field(count: number, radius: number, dust = false) {
+  const positions: number[] = [], colors: number[] = [], sizes: number[] = [], powers: number[] = [];
+  const rng = random(dust ? 17 : 401);
+  for (let i = 0; i < count; i++) {
+    const y = 2 * rng() - 1, a = rng() * Math.PI * 2;
+    const plane = Math.sqrt(1 - y * y);
+    const r = radius * (dust ? .13 + .87 * rng() : .8 + .2 * rng());
+    positions.push(r * plane * Math.cos(a), r * y, r * plane * Math.sin(a));
+    colors.push(...(rng() > .79 ? [1, .8, .57] : [.67, .78, 1]));
+    const brightness = rng() ** 8;
+    sizes.push(dust ? 5 + rng() * 14 : 2.8 + brightness * 15);
+    powers.push(dust ? .12 + rng() * .18 : .20 + brightness * .75);
+  }
+  return starPoints(positions, colors, sizes, powers);
+}
