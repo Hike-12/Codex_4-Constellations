@@ -1,20 +1,26 @@
 import './style.css';
 import { cosmosAudio } from './audio/cosmosAudio';
 import { constellations } from './data/constellations';
+import { destinations } from './data/destinations';
 import { observatory } from './scene/observatory';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const atlas = el('atlas'), drawer = el('monograph'), hud = el('hud');
 const restore = el<HTMLButtonElement>('restore');
 const mode = el<HTMLButtonElement>('mode'), connect = el<HTMLButtonElement>('connect'), sound = el<HTMLButtonElement>('sound');
+const showAtlas = el<HTMLButtonElement>('show-atlas'), showRoute = el<HTMLButtonElement>('show-route');
+const advance = el<HTMLButtonElement>('advance'), reverse = el<HTMLButtonElement>('reverse');
+const routeStops = el('route-stops'), source = el<HTMLAnchorElement>('source');
 const audio = cosmosAudio();
 const canvas = el<HTMLCanvasElement>('cosmos');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const pad = (n: number) => String(n).padStart(2, '0');
-let selected = -1;
-let drifting = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+let selected = -1, stop = -1;
+let drifting = !reducedMotion.matches;
 let connecting = false;
 let sounding = false;
 let scene: ReturnType<typeof observatory> | undefined;
+atlas.style.setProperty('--figures', String(constellations.length));
 
 const ticks = constellations.map((c, i) => {
   const button = document.createElement('button');
@@ -30,14 +36,72 @@ const ticks = constellations.map((c, i) => {
   return button;
 });
 
-function select(index: number) {
+const stops = destinations.map((item, index) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = item.name;
+  button.setAttribute('aria-pressed', 'false');
+  button.title = item.region;
+  button.addEventListener('click', () => visit(index));
+  routeStops.append(button);
+  return button;
+});
+
+function chart(route: boolean) {
+  showAtlas.setAttribute('aria-pressed', String(!route));
+  showRoute.setAttribute('aria-pressed', String(route));
+  atlas.hidden = route;
+  el('route').hidden = !route;
+}
+showAtlas.onclick = () => chart(false);
+showRoute.onclick = () => chart(true);
+function pageRoute(direction: number) {
+  routeStops.scrollBy({ left: direction * routeStops.clientWidth * .76, behavior: reducedMotion.matches ? 'instant' : 'smooth' });
+}
+el('route-back').onclick = () => pageRoute(-1);
+el('route-next').onclick = () => pageRoute(1);
+routeStops.addEventListener('wheel', event => {
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  event.preventDefault();
+  routeStops.scrollLeft += event.deltaY;
+}, { passive: false });
+
+function dismiss() {
   if (selected >= 0) ticks[selected].setAttribute('aria-pressed', 'false');
-  selected = index;
-  drawer.hidden = index < 0;
+  if (stop >= 0) stops[stop].setAttribute('aria-pressed', 'false');
+  selected = stop = -1;
+  drawer.hidden = true;
+  source.hidden = true;
+}
+
+function visit(index: number) {
+  dismiss();
+  connecting = drifting = false;
+  scene?.connect(false);
+  stop = index;
+  const item = destinations[index];
+  stops[index].setAttribute('aria-pressed', 'true');
+  drawer.hidden = false;
+  el('figure-index').textContent = item.region;
+  el('figure-name').textContent = item.name;
+  el('translation').textContent = '';
+  el('star-facts').hidden = true;
+  el('note').textContent = item.note;
+  if ('source' in item) { source.href = item.source; source.hidden = false; }
+  scene?.visit(index);
+  updateControls();
+}
+
+function select(index: number) {
+  dismiss();
   if (index >= 0) {
+    chart(false);
+    selected = index;
     const item = constellations[index];
     ticks[index].setAttribute('aria-pressed', 'true');
-    el('figure-index').textContent = pad(index + 1) + ' / 24';
+    drawer.hidden = false;
+    el('star-facts').hidden = false;
+    el('figure-index').textContent = pad(index + 1) + ' / ' + constellations.length;
     el('figure-name').textContent = item.name;
     el('translation').textContent = item.translation;
     el('brightest').textContent = item.brightest;
@@ -57,14 +121,14 @@ function updateControls() {
   el('sound-text').textContent = sounding ? 'On' : 'Off';
   el('trace').hidden = !connecting;
   canvas.dataset.mode = connecting ? 'connect' : drifting ? 'drift' : 'explore';
-  el('hint').textContent = connecting ? 'Trace neighboring stars to connect them'
-    : drifting ? 'Select a star or choose a constellation' : 'Drag to look · Scroll to travel';
+  advance.disabled = reverse.disabled = connecting || !scene;
+  el('hint').textContent = connecting ? 'Trace neighboring stars to connect them' : 'Scroll to fly · Drag to turn';
 }
 
 mode.onclick = () => {
   drifting = !drifting;
   if (connecting) toggleConnect(false);
-  if (drifting && selected >= 0) select(-1);
+  if (drifting && (selected >= 0 || stop >= 0)) select(-1);
   scene?.drift(drifting);
   updateControls();
 };
@@ -89,9 +153,9 @@ sound.onclick = async () => {
   }
 };
 el('close').onclick = () => {
-  const previous = selected;
+  const button = selected >= 0 && !atlas.hidden ? ticks[selected] : stop >= 0 && !el('route').hidden ? stops[stop] : undefined;
   select(-1);
-  if (previous >= 0) ticks[previous].focus();
+  (button ?? (atlas.hidden ? showRoute : showAtlas)).focus({ preventScroll: true });
 };
 el('reset').onclick = () => { if (selected >= 0) scene?.reset(selected); };
 function toggleHUD() {
@@ -101,13 +165,18 @@ function toggleHUD() {
   (hud.hidden ? restore : el('hide')).focus({ preventScroll: true });
 }
 el('hide').onclick = restore.onclick = toggleHUD;
+advance.onclick = () => scene?.thrust(370);
+reverse.onclick = () => scene?.thrust(-370);
 addEventListener('keydown', event => {
-  if (event.altKey || event.shiftKey || event.ctrlKey || event.metaKey || event.repeat) return;
-  if (event.key.toLowerCase() === 'h') toggleHUD();
+  if (event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return;
+  const key = event.key.toLowerCase();
+  if (key === 'w' || key === 's') { scene?.thrust(key === 'w' ? 90 : -90); return; }
+  if (event.repeat) return;
+  if (key === 'h') toggleHUD();
   if (event.key === 'Escape') {
     if (hud.hidden) toggleHUD();
     else if (connecting) toggleConnect(false);
-    else if (selected >= 0) select(-1);
+    else if (selected >= 0 || stop >= 0) select(-1);
   }
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     if (hud.hidden || !atlas.contains(document.activeElement)) return;
@@ -122,12 +191,20 @@ try {
   scene = observatory(canvas, {
     select,
     chime: audio.chime,
-    telemetry(ra, dec, fps) {
+    navigate() {
+      dismiss();
+      drifting = false;
+      updateControls();
+    },
+    telemetry(ra, dec, fps, range, sector) {
       const raMinutes = Math.floor(ra * 4);
       const decMinutes = Math.floor(Math.abs(dec) * 60);
       el('ra').textContent = 'RA ' + pad(Math.floor(raMinutes / 60)) + 'ʰ ' + pad(raMinutes % 60) + 'ᵐ';
       el('dec').textContent = 'DEC ' + (dec < 0 ? '−' : '+') + pad(Math.floor(decMinutes / 60)) + '° ' + pad(decMinutes % 60) + '′';
       el('fps').textContent = (fps || '—') + ' FPS';
+      const readout = el('range');
+      readout.textContent = 'Range ' + String(Math.round(range)).padStart(3, '0');
+      readout.dataset.sector = sector;
     },
     progress(index, count) {
       if (index !== selected) return;

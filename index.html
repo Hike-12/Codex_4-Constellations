@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#040508">
   <link rel="icon" href="data:,">
-  <meta name="description" content="Drift through a quiet procedural cosmos, trace 24 real constellations, and listen to the stars.">
+  <meta name="description" content="Drift through a quiet procedural cosmos, fly through the Solar System, and trace 32 real constellations.">
   <title>Astral Drift · Celestial Observatory</title>
 </head>
 <body>
@@ -27,17 +27,34 @@
       </header>
 
       <article id="monograph" hidden aria-labelledby="figure-name">
-        <div class="overline"><span id="figure-index"></span><button id="close" type="button" aria-label="Close constellation">×</button></div>
+        <div class="overline"><span id="figure-index"></span><button id="close" type="button" aria-label="Close details">×</button></div>
         <h2 id="figure-name"></h2>
         <p id="translation"></p>
-        <dl><div><dt>Brightest star</dt><dd id="brightest"></dd></div><div><dt>Distance</dt><dd id="distance"></dd></div></dl>
+        <dl id="star-facts"><div><dt>Brightest star</dt><dd id="brightest"></dd></div><div><dt>Distance</dt><dd id="distance"></dd></div></dl>
         <p id="note"></p>
+        <a id="source" href="https://science.nasa.gov/" target="_blank" rel="noopener" hidden>NASA Science ↗</a>
         <div id="trace" hidden><span id="trace-count" role="status"></span><button id="reset" type="button">Reset</button></div>
       </article>
 
       <footer class="bottom">
-        <div class="atlas-heading"><span><b></b> Constellation atlas</span><span id="hint">Select a star or choose a constellation</span><span>24 figures</span></div>
+        <div class="atlas-heading">
+          <div class="atlas-tabs" role="group" aria-label="Choose a flight chart">
+            <button id="show-atlas" type="button" aria-pressed="true"><b></b> Constellations</button>
+            <button id="show-route" type="button" aria-pressed="false">Destinations</button>
+          </div>
+          <span id="hint">Scroll to fly · Drag to turn</span>
+          <div class="flight-controls">
+            <span id="range" title="Distance from the observatory in scene units">Range 000</span>
+            <button id="reverse" type="button" aria-label="Fly backward" title="Fly backward (S)">−</button>
+            <button id="advance" type="button" aria-label="Fly forward" title="Fly forward (W)">+</button>
+          </div>
+        </div>
         <div id="atlas" aria-label="Choose a constellation"></div>
+        <div id="route" class="route" hidden>
+          <button id="route-back" class="route-pager" type="button" aria-label="Previous destinations">‹</button>
+          <div id="route-stops" aria-label="Choose a destination"></div>
+          <button id="route-next" class="route-pager" type="button" aria-label="More destinations">›</button>
+        </div>
       </footer>
     </div>
     <button id="restore" type="button" hidden aria-label="Show interface (H)" title="Show interface (H)">H</button>
