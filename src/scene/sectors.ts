@@ -27,7 +27,7 @@ interface World {
 
 function worldAt(x: number, y: number, z: number): World | undefined {
   const key = seed(x, y, z);
-  if (key % 11 >= 3) return;
+  if (key % 11 >= 2) return;
   const rng = random(key ^ 0x28c569da);
   const center = new Vector3(x + .17 + rng() * .66, y + .18 + rng() * .64, z + .17 + rng() * .66).multiplyScalar(span);
   if (center.lengthSq() < 195 ** 2 || landmarks.some(item => center.distanceToSquared(item.center) < item.clearance ** 2)) return;
