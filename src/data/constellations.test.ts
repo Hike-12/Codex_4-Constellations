@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { connectStar, constellations, projectStar, spectralColor, waypointProgress } from './constellations';
 
 describe('sky atlas', () => {
-  it('contains 24 unique annotated constellations with valid catalog stars and links', () => {
-    expect(constellations).toHaveLength(24);
-    expect(new Set(constellations.map(c => c.id)).size).toBe(24);
+  it('contains 32 unique annotated constellations with valid catalog stars and links', () => {
+    expect(constellations).toHaveLength(32);
+    expect(new Set(constellations.map(c => c.id)).size).toBe(32);
     for (const c of constellations) {
       expect(c.name && c.translation && c.brightest && c.note).toBeTruthy();
       expect(c.distance).toBeGreaterThan(0);
@@ -51,3 +51,4 @@ describe('sky atlas', () => {
     expect([...connectStar(edges, stroke, 3)]).toEqual([0, 1, 2, 3]);
   });
 });
+

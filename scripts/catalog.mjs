@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 // Inputs: d3-celestial's constellations.lines.json and stars.6.json.
 const [lines, stars] = process.argv.slice(2).map(path => JSON.parse(readFileSync(path)).features);
-const ids = 'Ori UMa UMi Cas Cyg Lyr Sco Leo Tau Gem And Peg Aql Boo CMa Cen Cru Dra Her Per Sgr Vir Aur CrB'.split(' ');
+const ids = 'Ori UMa UMi Cas Cyg Lyr Sco Leo Tau Gem And Peg Aql Boo CMa Cen Cru Dra Her Per Sgr Vir Aur CrB Ari Lib Psc Cet Del Col CMi Eri'.split(' ');
 const byCoordinate = new Map(stars.map(s => [s.geometry.coordinates.join(','), s.properties]));
 const catalog = Object.fromEntries(ids.map(id => {
   const points = [], edges = [], indices = new Map();
@@ -24,3 +24,4 @@ const catalog = Object.fromEntries(ids.map(id => {
   return [id, { points, edges }];
 }));
 writeFileSync('src/data/catalog.json', JSON.stringify(catalog) + '\n');
+

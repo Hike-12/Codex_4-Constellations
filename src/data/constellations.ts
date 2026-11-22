@@ -25,6 +25,14 @@ const atlas = [
   ['Vir','Virgo','The Maiden','Spica',250,'Spica is a close pair wrapped in blue light. Far behind it, a crowded cluster of galaxies fills this stretch of sky.'],
   ['Aur','Auriga','The Charioteer','Capella',43,'Capella looks like one steady golden light. Two giant stars account for most of its glow.'],
   ['CrB','Corona Borealis','The Northern Crown','Alphecca',75,'A small arc of stars makes the northern crown. Alphecca shines at its center like a jewel.'],
+  ['Ari','Aries','The Ram','Hamal',66,'Hamal and Sheratan form a small bend beside Pisces. The ram is easiest to find on autumn evenings in the north.'],
+  ['Lib','Libra','The Scales','Zubeneschamali',185,'The two brightest stars once marked the claws of Scorpius. Today they balance the only inanimate figure in the zodiac.'],
+  ['Psc','Pisces','The Fishes','Alpherg',350,'Two faint chains meet at the knot of a celestial cord. One end curls into the Circlet below Pegasus.'],
+  ['Cet','Cetus','The Sea Monster','Diphda',96,'Diphda shines at the tail of this sprawling figure. Nearby Mira swells and fades over the course of nearly a year.'],
+  ['Del','Delphinus','The Dolphin','Rotanev',101,'A tiny diamond and a short tail mark the dolphin. Look for it east of Altair, alongside the Milky Way.'],
+  ['Col','Columba','The Dove','Phact',261,'A small handful of stars marks the dove below Canis Major. Its soft outline is clearest far from city lights.'],
+  ['CMi','Canis Minor','The Little Dog','Procyon',11.5,'Procyon, Sirius and Betelgeuse form the Winter Triangle. Procyon itself has a faint white dwarf companion.'],
+  ['Eri','Eridanus','The River','Achernar',139,'The river winds from the foot of Orion into the southern sky. Achernar marks the far end of its long course.'],
 ] as const;
 
 export type Star = [ra: number, dec: number, magnitude: number, colorIndex: number];
