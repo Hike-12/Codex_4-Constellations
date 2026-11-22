@@ -28,6 +28,30 @@ export function cosmosAudio() {
     wet.gain.value = .42;
     room.connect(wet).connect(master);
 
+    const bed = ctx.createBuffer(2, ctx.sampleRate * 12, ctx.sampleRate);
+    for (let channel = 0; channel < bed.numberOfChannels; channel++) {
+      const samples = bed.getChannelData(channel);
+      const white = Float32Array.from(samples, () => Math.random() * 2 - 1);
+      let low = 0, soft = 0;
+      // Warm the filters with the same sequence so the loop has no seam.
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < samples.length; i++) {
+          low += .008 * (white[i] - low);
+          soft += .055 * (white[i] - soft);
+          samples[i] = low * 2.8 + soft * .44;
+        }
+      }
+    }
+    const texture = ctx.createBufferSource();
+    texture.buffer = bed;
+    texture.loop = true;
+    const rumble = ctx.createBiquadFilter();
+    rumble.type = 'highpass';
+    rumble.frequency.value = 38;
+    const bedLevel = ctx.createGain();
+    bedLevel.gain.value = .32;
+    texture.connect(rumble).connect(bedLevel).connect(master);
+    texture.start();
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 300;
@@ -47,7 +71,7 @@ export function cosmosAudio() {
         voice.type = detune < 0 ? 'sine' : 'triangle';
         voice.frequency.value = frequency;
         voice.detune.value = detune;
-        gain.gain.value = (i < 2 ? .024 : .014) * (detune < 0 ? 1 : .58);
+        gain.gain.value = (i < 2 ? .017 : .010) * (detune < 0 ? 1 : .58);
         const pan = ctx.createStereoPanner();
         pan.pan.value = detune * .09;
         voice.connect(gain).connect(pan).connect(filter);
@@ -80,7 +104,7 @@ export function cosmosAudio() {
         const envelope = ctx.createGain();
         bell.frequency.value = frequency * ratio;
         envelope.gain.setValueAtTime(.0001, start);
-        envelope.gain.exponentialRampToValueAtTime(.065 / (i * 2 + 1), start + .025);
+        envelope.gain.exponentialRampToValueAtTime(.043 / (i * 2 + 1), start + .025);
         envelope.gain.exponentialRampToValueAtTime(.0001, start + 2.4 - i * .42);
         bell.connect(envelope).connect(pan);
         bell.start(start);
