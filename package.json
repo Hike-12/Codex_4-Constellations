@@ -23,5 +23,11 @@
   "homepage": "https://github.com/Hike-12/Codex_4-Constellations#readme",
   "dependencies": {
     "three": "^0.174.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.174.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8",
+    "vitest": "^3.2.7"
   }
 }
