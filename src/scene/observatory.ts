@@ -51,7 +51,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     matrix.lookAt(origin, new Vector3(...projectStar(87, -2)), up),
   );
   const angles = new Euler(0, 0, 0, 'YXZ');
-  let drift = !motion.matches, connecting = false, focus = -1;
+  let drift = !motion.matches, connecting = false, focus = -1, destinationIndex = -1;
   let pointerX = 0, pointerY = 0, travel = 0, speed = 0;
   let pressed: { x: number; y: number; dragged: boolean } | undefined;
   let flight: { at: number; from: Vector3; to: Vector3; duration: number } | undefined;
@@ -154,9 +154,9 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   });
   canvas.addEventListener('pointercancel', () => { pressed = undefined; });
   function beginNavigation() {
-    if (drift || focus >= 0 || flight) callbacks.navigate();
+    if (drift || focus >= 0 || destinationIndex >= 0 || flight) callbacks.navigate();
     flight = undefined;
-    focus = -1;
+    focus = destinationIndex = -1;
     drift = false;
   }
 
@@ -224,7 +224,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     camera.updateMatrixWorld();
     sky.dome.position.copy(position);
     stars.position.copy(position);
-    anchors.visible = position.lengthSq() < 355 ** 2;
+    anchors.visible = destinationIndex <= 0 && position.lengthSq() < 355 ** 2;
     sky.update(renderer, camera.position, travel * .17 + phase * 2, now);
     const animationTime = motion.matches ? 0 : time;
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.time.value = animationTime;
@@ -282,6 +282,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
 
   return {
     focus(index: number) {
+      destinationIndex = -1;
       focus = index;
       if (index < 0) { flight = undefined; return; }
       const direction = figures[index].center;
@@ -291,8 +292,10 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     visit(index: number) {
       focus = -1;
       drift = false;
+      destinationIndex = index;
       const stop = bodies.entries[index];
-      fly(stop.position, stop.direction);
+      const extraRoom = index === 0 ? 0 : Math.max(0, .68 - camera.aspect) * 65;
+      fly(stop.position.clone().addScaledVector(stop.direction, -extraRoom), stop.direction);
     },
     thrust,
     drift(value: boolean) {
