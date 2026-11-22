@@ -17,7 +17,7 @@ export default defineConfig({
       if (entry.imports.length || entry.dynamicImports.length) {
         this.error('The packed observatory entry must be self-contained.');
       }
-      const fileName = entry.fileName.replace(/\.js$/, '.gz');
+      const fileName = entry.fileName.replace(/\.js$/, '.astral');
       this.emitFile({ type: 'asset', fileName, source: gzipSync(entry.code, { level: 9 }) });
       entry.code = `
         const packed = new URL(${JSON.stringify('./' + fileName.split('/').pop())}, import.meta.url);
