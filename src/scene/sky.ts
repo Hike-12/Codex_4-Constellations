@@ -105,7 +105,7 @@ export function nebula() {
 export function starMaterial(scale = 1) {
   return new ShaderMaterial({
     transparent: true, depthWrite: false, blending: AdditiveBlending,
-    uniforms: { time: {value: 0}, pixelRatio: {value: 1}, scale: {value: scale} },
+    uniforms: { time: {value: 0}, pixelRatio: {value: 1}, scale: {value: scale}, nearby: { value: 0 } },
     vertexShader: `
       attribute vec3 tint;
       attribute float size;
@@ -117,12 +117,15 @@ export function starMaterial(scale = 1) {
       uniform float time;
       uniform float pixelRatio;
       uniform float scale;
+      uniform float nearby;
       void main(){
         vec4 p=modelViewMatrix*vec4(position,1.);
         gl_Position=projectionMatrix*p;
-        gl_PointSize=clamp(size*scale*pixelRatio,1.,64.);
+        float localSize=mix(1.,clamp(36./max(4.,-p.z),.35,3.1),nearby);
+        gl_PointSize=clamp(size*scale*pixelRatio*localSize,1.,64.);
         c=tint;
         intensity=power*(.83+.17*sin(time*(.4+phase*.8)+phase*49.));
+        intensity*=mix(1.,smoothstep(.45,4.,-p.z)*(1.-smoothstep(92.,207.,length(p.xyz))),nearby);
         flair=smoothstep(5.,13.,size);
       }
     `,

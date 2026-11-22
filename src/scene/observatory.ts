@@ -3,10 +3,12 @@ import { canLinkStar, connectStar, constellations, projectStar, waypointProgress
 import { celestialBodies } from './celestialBodies';
 import { makeFigures } from './constellations';
 import { field, nebula } from './sky';
+import { sectors } from './sectors';
 
 type Callbacks = {
   select(index: number): void;
-  telemetry(ra: number, dec: number, fps: number): void;
+  telemetry(ra: number, dec: number, fps: number, range: number, sector: string): void;
+  navigate(): void;
   chime(note: number, pan: number): void;
   progress(index: number, count: number): void;
 };
@@ -19,8 +21,9 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const stars = field(9900, 730);
   const dust = field(950, 105, true);
   const bodies = celestialBodies();
+  const frontier = sectors();
   const { figures, anchors } = makeFigures();
-  scene.add(sky.dome, stars, dust, bodies.root, anchors, ...figures.map(f => f.lines));
+  scene.add(sky.dome, stars, dust, bodies.root, frontier.root, anchors, ...figures.map(f => f.lines));
 
   const ripple = new Mesh(new RingGeometry(.92, 1, 32), new MeshBasicMaterial({
     color: '#e0c49c', transparent: true, blending: AdditiveBlending, depthWrite: false,
@@ -37,6 +40,8 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   const forward = new Vector3();
   const offset = new Vector3();
   const driftSide = new Vector3(...projectStar(177, 0));
+  const driftCenter = new Vector3();
+  let driftRa = 87, driftDec = -2;
   const projected = new Vector3();
   const up = new Vector3(0, 1, 0);
   const matrix = new Matrix4();
@@ -49,7 +54,8 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   let drift = !motion.matches, connecting = false, focus = -1;
   let pointerX = 0, pointerY = 0, travel = 0, speed = 0;
   let pressed: { x: number; y: number; dragged: boolean } | undefined;
-  let flight: { at: number; from: Vector3 } | undefined;
+  let flight: { at: number; from: Vector3; to: Vector3; duration: number } | undefined;
+  let sector = '0:0:0';
   let time = 0, previous = 0, phase = 0, frames = 0, sample = 0;
   let baseFov = 47;
   let quality = 1;
@@ -61,6 +67,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     const pixelBudget = Math.sqrt(1_650_000 / (innerWidth * innerHeight));
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.4, pixelBudget) * quality);
     renderer.setSize(innerWidth, innerHeight, false);
+    bodies.resize(innerHeight * renderer.getPixelRatio() * 1.05);
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
   }
 
@@ -75,6 +82,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   addEventListener('resize', resize);
 
   function hit(x: number, y: number, eligibleOnly = false) {
+    if (!anchors.visible) return;
     let best: { figure: number; star: number } | undefined;
     let distance = 21 ** 2;
     for (const [figure, group] of figures.entries()) {
@@ -125,11 +133,11 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       return;
     }
     canvas.classList.toggle('over-star', !!hit(e.clientX, e.clientY));
-    if (pressed && !drift) {
+    if (pressed) {
       const dx = e.clientX - pressed.x, dy = e.clientY - pressed.y;
       if (!pressed.dragged && Math.hypot(dx, dy) < 4) return;
       pressed = { x: e.clientX, y: e.clientY, dragged: true };
-      flight = undefined;
+      beginNavigation();
       angles.setFromQuaternion(look);
       angles.y -= dx * .004;
       angles.x = Math.max(-1.54, Math.min(1.54, angles.x - dy * .004));
@@ -145,11 +153,24 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     pressed = undefined;
   });
   canvas.addEventListener('pointercancel', () => { pressed = undefined; });
+  function beginNavigation() {
+    if (drift || focus >= 0 || flight) callbacks.navigate();
+    flight = undefined;
+    focus = -1;
+    drift = false;
+  }
+
+  function thrust(delta: number) {
+    if (connecting || delta === 0) return;
+    beginNavigation();
+    speed = Math.max(-900, Math.min(900, speed + delta));
+  }
+
   canvas.addEventListener('wheel', e => {
-    if (drift || connecting) return;
+    if (connecting) return;
     e.preventDefault();
-    speed -= Math.sign(e.deltaY) * Math.min(26, Math.abs(e.deltaY) * .065);
-    speed = Math.max(-46, Math.min(46, speed));
+    const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+    thrust(Math.sign(pixels) * Math.min(370, Math.abs(pixels) * 1.75));
   }, { passive: false });
 
   function frame(now: number) {
@@ -157,29 +178,28 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
     previous = now;
     time += dt;
     if (flight) {
-      const progress = waypointProgress((now - flight.at) / 1000, motion.matches ? .25 : 2.75);
-      const direction = figures[focus].center;
+      const progress = waypointProgress((now - flight.at) / 1000, motion.matches ? .25 : flight.duration);
       look.slerpQuaternions(startingLook, destination, progress);
-      position.copy(flight.from).lerp(offset.copy(direction).multiplyScalar(29), progress);
+      position.copy(flight.from).lerp(flight.to, progress);
       if (progress >= 1) flight = undefined;
     } else if (drift && focus < 0 && !connecting) {
       phase += dt * .10;
-      const ra = (innerWidth < 650 ? 96 : 87) + Math.sin(phase) * 16 + Math.sin(phase * .41) * 11;
-      const dec = -2 + Math.sin(phase * .84) * 7;
+      const ra = driftRa + (driftCenter.lengthSq() === 0 && innerWidth < 650 ? 9 : 0) + Math.sin(phase) * 16 + Math.sin(phase * .41) * 11;
+      const dec = driftDec + Math.sin(phase * .84) * 7;
       const target = offset.set(...projectStar(ra - pointerX * 4, dec - pointerY * 3));
       destination.setFromRotationMatrix(matrix.lookAt(origin, target, up));
       look.slerp(destination, 1 - Math.exp(-dt * 1.8));
       offset.set(...projectStar(87, 0, 14 * Math.sin(phase)));
       offset.addScaledVector(driftSide, 7 * (1 - Math.cos(phase)));
       offset.y = 3.7 * Math.sin(phase * 2);
-      position.lerp(offset, 1 - Math.exp(-dt * .64));
+      position.lerp(offset.add(driftCenter), 1 - Math.exp(-dt * .64));
     }
     camera.quaternion.copy(look);
     forward.set(0, 0, -1).applyQuaternion(look);
     if (!flight && Math.abs(speed) > .025 && !drift && !connecting) {
-      position.addScaledVector(forward, speed * dt).clampLength(0, 135);
+      position.addScaledVector(forward, speed * dt);
       travel += speed * dt * .07;
-      speed *= Math.exp(-dt * 2.4);
+      speed *= Math.exp(-dt * 1.55);
     }
     camera.position.copy(position);
     let targetFov = baseFov;
@@ -202,16 +222,20 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       camera.updateProjectionMatrix();
     }
     camera.updateMatrixWorld();
-    sky.update(renderer, camera.position, travel + phase * 2, now);
+    sky.dome.position.copy(position);
+    stars.position.copy(position);
+    anchors.visible = position.lengthSq() < 355 ** 2;
+    sky.update(renderer, camera.position, travel * .17 + phase * 2, now);
     const animationTime = motion.matches ? 0 : time;
     for (const layer of [stars, dust, anchors]) layer.material.uniforms.time.value = animationTime;
     dust.rotation.y = animationTime * .013;
     bodies.update(animationTime);
+    sector = frontier.update(position, animationTime, renderer.getPixelRatio());
 
     const hovered = hit((pointerX + 1) * innerWidth / 2, (pointerY + 1) * innerHeight / 2);
     figures.forEach((figure, index) => {
       const alignment = figure.center.dot(forward);
-      const opacity = focus === index ? .66 : hovered?.figure === index ? .43
+      const opacity = !anchors.visible ? 0 : focus === index ? .66 : hovered?.figure === index ? .43
         : connecting ? .055 : Math.max(0, (alignment - .84) * 2.1) * (focus < 0 ? 1 : .35);
       figure.update(dt, opacity, connecting ? (visited.get(index) ?? empty) : undefined, () => {
         if (focus === index || (focus < 0 && alignment > .95)) {
@@ -234,7 +258,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       const ra = (Math.atan2(-forward.z, forward.x) * 180 / Math.PI + 360) % 360;
       const dec = Math.asin(forward.y) * 180 / Math.PI;
       const fps = sample ? Math.round(frames * 1000 / (now - sample)) : 0;
-      callbacks.telemetry(ra, dec, fps);
+      callbacks.telemetry(ra, dec, fps, position.length(), sector);
       slowSamples = fps > 0 && fps < 47 ? slowSamples + 1 : 0;
       if (slowSamples === 3 && quality > .62) {
         quality *= .85;
@@ -248,17 +272,39 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
   }
   renderer.setAnimationLoop(frame);
 
+  function fly(to: Vector3, direction: Vector3) {
+    startingLook.copy(look);
+    destination.setFromRotationMatrix(matrix.lookAt(origin, direction, up));
+    flight = { at: performance.now(), from: position.clone(), to,
+      duration: Math.min(4.9, 2.5 + Math.sqrt(to.distanceTo(position)) * .055) };
+    speed = 0;
+  }
+
   return {
     focus(index: number) {
       focus = index;
       if (index < 0) { flight = undefined; return; }
-      startingLook.copy(look);
-      destination.setFromRotationMatrix(matrix.lookAt(origin, figures[index].center, up));
-      flight = { at: performance.now(), from: position.clone() };
-      speed = 0;
+      const direction = figures[index].center;
+      fly(direction.clone().multiplyScalar(29), direction);
       callbacks.progress(index, visited.get(index)?.size ?? 0);
     },
-    drift(value: boolean) { drift = value; if (value) speed = 0; },
+    visit(index: number) {
+      focus = -1;
+      drift = false;
+      const stop = bodies.entries[index];
+      fly(stop.position, stop.direction);
+    },
+    thrust,
+    drift(value: boolean) {
+      drift = value;
+      if (!value) return;
+      speed = 0;
+      driftCenter.copy(position);
+      const heading = forward.set(0,0,-1).applyQuaternion(look);
+      driftRa = Math.atan2(-heading.z, heading.x) * 180 / Math.PI;
+      driftDec = Math.asin(heading.y) * 180 / Math.PI;
+      phase = 0;
+    },
     connect(value: boolean) { connecting = value; if (value) speed = 0; },
     reset(index: number) { visited.delete(index); callbacks.progress(index, 0); },
   };

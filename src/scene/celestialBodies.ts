@@ -8,7 +8,7 @@ const light = new Vector3(-.83,.42,.36).normalize();
 
 export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 48) {
   return new Mesh(new SphereGeometry(radius, detail, Math.max(12, detail * .65)), new ShaderMaterial({
-    uniforms: { kind: { value: kind }, light: { value: light }, time: { value: 0 },
+    uniforms: { kind: { value: kind }, light: { value: light }, time: { value: 0 }, opacity: { value: 1 },
       tint: { value: new Color(tint).convertLinearToSRGB() } },
     vertexShader: `
       varying vec3 surface,normalWorld,view;
@@ -22,7 +22,7 @@ export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 
     `,
     fragmentShader: `
       varying vec3 surface,normalWorld,view;
-      uniform float kind,time;
+      uniform float kind,time,opacity;
       uniform vec3 light,tint;
       ${noise}
       void main(){
@@ -84,7 +84,7 @@ export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 
           float spots=smoothstep(.44,.74,fbm(p*7.));
           c=tint*(.62+granules*.61-spots*.14)+vec3(.16)*max(dot(n,v),0.);
         }
-        gl_FragColor=vec4(c,1.);
+        gl_FragColor=vec4(c,opacity);
       }
     `,
   }));
