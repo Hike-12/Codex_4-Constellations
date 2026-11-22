@@ -25,23 +25,17 @@ export function makeFigures() {
     }));
     lines.frustumCulled = false;
     let progress = 0;
-    let announced = false;
     let visible = false;
     const tip = new Vector3();
     return {
       stars, center: center.normalize(), lines,
-      update(dt: number, opacity: number, visited: ReadonlySet<number> | undefined, chime: () => void) {
+      update(dt: number, opacity: number, visited: ReadonlySet<number> | undefined) {
         if (visible) visible = opacity > .13;
         else visible = opacity > .24;
         const target = visible ? 1 : 0;
         progress += Math.sign(target - progress) * Math.min(Math.abs(target - progress), dt * (visible ? .59 : 1.6));
         lines.material.opacity = opacity;
         lines.visible = opacity > .02 && (progress > 0 || !!visited?.size);
-        if (!visited && progress >= 1 && !announced) {
-          chime();
-          announced = true;
-        }
-        if (progress === 0) announced = false;
         if (!lines.visible) return;
         item.edges.forEach(([a, b], edge) => {
           const start = stars[a], end = stars[b];

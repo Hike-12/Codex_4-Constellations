@@ -1,9 +1,9 @@
 const tones = [
-  [108, .010, -.24, .037],
-  [162, .0074, .23, .049],
-  [216, .0047, -.42, .031],
-  [270, .0031, .43, .041],
-  [324, .0020, .07, .055],
+  [144, .057, -.24, .037],
+  [216, .043, .23, .049],
+  [288, .031, -.42, .031],
+  [360, .020, .43, .041],
+  [432, .010, .07, .055],
 ];
 const notes = [432, 486, 540, 648, 729];
 
@@ -61,7 +61,7 @@ export function cosmosAudio() {
         await audio.resume();
       }
       enabled = value;
-      if (audio) master.gain.setTargetAtTime(value ? .65 : 0, audio.currentTime, value ? .90 : .22);
+      if (audio) master.gain.setTargetAtTime(value ? .88 : 0, audio.currentTime, value ? .29 : .18);
     },
     chime(note: number, position: number) {
       if (!enabled || !audio || audio.state !== 'running') return;
@@ -72,17 +72,17 @@ export function cosmosAudio() {
       pan.connect(master);
       pan.connect(space);
       const pitch = notes[note % notes.length];
-      [1, 2].forEach((partial, i) => {
+      [1, 2, 2.76].forEach((partial, i) => {
         const bell = ctx.createOscillator();
         const envelope = ctx.createGain();
         bell.frequency.value = pitch * partial;
         envelope.gain.setValueAtTime(.00001, start);
-        envelope.gain.exponentialRampToValueAtTime(i ? .0011 : .0085, start + .115);
-        envelope.gain.exponentialRampToValueAtTime(.00001, start + 2.15);
+        envelope.gain.exponentialRampToValueAtTime([.125, .025, .008][i], start + .055);
+        envelope.gain.exponentialRampToValueAtTime(.00001, start + [2.25, 1.32, .62][i]);
         bell.connect(envelope).connect(pan);
         bell.start(start);
-        bell.stop(start + 2.23);
-        bell.onended = () => { bell.disconnect(); envelope.disconnect(); if (i === 1) pan.disconnect(); };
+        bell.stop(start + 2.3);
+        bell.onended = () => { bell.disconnect(); envelope.disconnect(); if (i === 2) pan.disconnect(); };
       });
     },
   };

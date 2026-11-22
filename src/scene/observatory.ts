@@ -193,7 +193,10 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       const progress = waypointProgress((now - flight.at) / 1000, motion.matches ? .25 : flight.duration);
       look.slerpQuaternions(startingLook, destination, progress);
       position.copy(flight.from).lerp(flight.to, progress);
-      if (progress >= 1) flight = undefined;
+      if (progress >= 1) {
+        flight = undefined;
+        if (focus >= 0) callbacks.chime(focus, 0);
+      }
     } else if (drift && focus < 0 && !connecting) {
       phase += dt * .10;
       const ra = driftRa + (driftCenter.lengthSq() === 0 && innerWidth < 650 ? 9 : 0) + Math.sin(phase) * 16 + Math.sin(phase * .41) * 11;
@@ -259,12 +262,7 @@ export function observatory(canvas: HTMLCanvasElement, callbacks: Callbacks) {
       const alignment = figure.center.dot(forward);
       const opacity = atlasOpacity * (focus === index ? .66 : hovered?.figure === index ? .43
         : connecting ? .055 : Math.max(0, (alignment - .84) * 2.1) * (focus < 0 ? 1 : .35));
-      figure.update(dt, opacity, connecting ? (visited.get(index) ?? empty) : undefined, () => {
-        if (focus === index) {
-          projected.copy(figure.center).multiplyScalar(420).project(camera);
-          callbacks.chime(index, projected.x);
-        }
-      });
+      figure.update(dt, opacity, connecting ? (visited.get(index) ?? empty) : undefined);
     });
 
     const pulse = (time - pulseAt) / .95;
