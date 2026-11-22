@@ -14,11 +14,12 @@ export function deepSky(kind: 'nebula' | 'cluster' | 'galaxy', radius: number) {
   if (kind === 'galaxy') {
     for (let i = 0; i < 6800; i++) {
       const r = Math.pow(rng(), 1.7), bulge = 1 - r;
-      const a = (i % 2) * Math.PI + r * 6.4 + (rng() - .5) * (.7 + 1.9 * bulge * bulge);
+      const diffuse = i % 4 === 0;
+      const a = diffuse ? rng() * Math.PI * 2 : (i % 2) * Math.PI + r * 6.4 + (rng() - .5) * (.92 + 1.9 * bulge * bulge);
       const x = r * Math.cos(a), z = r * Math.sin(a);
       push(x, (rng() - .5) * (.10 + .22 * bulge ** 12), z,
         r < .13 ? [1, .77, .49] : i % 5 === 0 ? [.64, .56, 1] : [.54, .66, .97],
-        i % 11 === 0 ? .16 + .12 * bulge : .011 + .029 * bulge, i % 11 === 0 ? .043 : .33);
+        i % 11 === 0 ? .16 + .12 * bulge : .011 + .029 * bulge, i % 11 === 0 ? .029 : diffuse ? .15 : .26);
     }
   } else {
     const cluster = kind === 'cluster';

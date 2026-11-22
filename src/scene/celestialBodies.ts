@@ -2,13 +2,14 @@ import { AdditiveBlending, BackSide, Color, DoubleSide, Group, Mesh, RingGeometr
 import { destinations } from '../data/destinations';
 import { projectStar } from '../data/constellations';
 import { deepSky } from './deepSky';
+import { earthMask } from './earth';
 import { noise, starPoints } from './sky';
 
 const light = new Vector3(-.83,.42,.36).normalize();
 
 export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 48) {
   return new Mesh(new SphereGeometry(radius, detail, Math.max(12, detail * .65)), new ShaderMaterial({
-    uniforms: { kind: { value: kind }, light: { value: light }, time: { value: 0 }, opacity: { value: 1 },
+    uniforms: { kind: { value: kind }, light: { value: light }, time: { value: 0 }, opacity: { value: 1 }, landMap: { value: kind === 2 ? earthMask() : null },
       tint: { value: new Color(tint).convertLinearToSRGB() } },
     vertexShader: `
       varying vec3 surface,normalWorld,view;
@@ -24,6 +25,7 @@ export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 
       varying vec3 surface,normalWorld,view;
       uniform float kind,time,opacity;
       uniform vec3 light,tint;
+      uniform sampler2D landMap;
       ${noise}
       void main(){
         vec3 n=normalize(normalWorld),v=normalize(view),p=normalize(surface);
@@ -44,12 +46,13 @@ export function sphere(radius: number, kind: number, tint = '#c69c78', detail = 
         }else if(kind<2.5){
           float land=fbm(p*4.6+vec3(.7,0,1.3));
           float green=fbm(p*15.);
-          float coast=smoothstep(.475,.515,land);
-          float clouds=smoothstep(.48,.67,fbm(p*vec3(8.,13.,8.)+vec3(time*.019,0,0)+land*.6));
+          vec2 globe=vec2(fract(atan(p.z,-p.x)*.15915494+.25),asin(clamp(p.y,-1.,1.))*.31830989+.5);
+          float coast=smoothstep(.19,.82,texture2D(landMap,globe).r);
+          float clouds=smoothstep(.51,.70,fbm(p*vec3(8.,13.,8.)+vec3(time*.019,0,0)+land*.6));
           float polar=smoothstep(.76,.97,abs(p.y)+(green-.5)*.19);
           float glint=pow(max(dot(n,normalize(light+v)),0.),65.)*(1.-coast);
           vec3 ocean=mix(vec3(.035,.105,.22),vec3(.12,.28,.40),green);
-          vec3 ground=mix(vec3(.44,.34,.19),vec3(.12,.27,.15),smoothstep(.29,.68,green));
+          vec3 ground=mix(vec3(.44,.34,.19),vec3(.12,.27,.15),smoothstep(.25,.64,green+abs(p.y)*.16));
           c=mix(ocean,ground,coast);
           c=mix(c,vec3(.72,.82,.88),max(polar,clouds*.79));
           c=c*(.055+lit*.96)+vec3(.48,.61,.66)*glint*.48;
@@ -167,7 +170,7 @@ export function celestialBodies() {
     root.add(group);
     if (item.kind === 'galaxy' || item.kind === 'cluster' || item.kind === 'nebula') {
       const volume = deepSky(item.kind, item.radius);
-      if (item.kind === 'galaxy') volume.rotation.set(.41, -.36, -.52);
+      if (item.kind === 'galaxy') volume.rotation.set(.12, -.22, -.25);
       group.add(volume);
       clouds.push(volume);
     } else if (item.kind === 'binary') {
