@@ -45,6 +45,19 @@ export function nebula() {
         col+=vec3(.28,.20,.13)*pow(storm,2.9)*ridge;
         float shaft=pow(max(0.,dot(d,normalize(vec3(-.15,.13,-1.)))),29.);
         col+=vec3(.15,.12,.085)*shaft*storm*band*.7;
+        // Integrate three depths of local mist in front of the distant cloud bank.
+        float transmittance=1.;
+        vec3 haze=vec3(0.);
+        for(int i=0; i<3; i++){
+          float depth=.55+float(i)*.61;
+          vec3 samplePoint=cameraPosition*.018+d*depth*3.1+vec3(4.2,8.1,1.4);
+          float pocket=smoothstep(.30,.77,noise(samplePoint)*.74+noise(samplePoint*2.6)*.26);
+          float mist=band*pocket*.15;
+          float light=shaft*.7+pow(max(0.,dot(d,vec3(-.86,.02,-.50))),28.)*.28;
+          haze+=transmittance*mist*(vec3(.035,.053,.095)+light*vec3(.14,.106,.078));
+          transmittance*=exp(-mist);
+        }
+        col=col*transmittance+haze;
         float dark=smoothstep(.36,.69,fbm(p*1.7+warp*2.))*band;
         col*=1.-dark*.61;
         col+=vec3((hash(vec3(gl_FragCoord.xy,0.))-.5)*.006);
